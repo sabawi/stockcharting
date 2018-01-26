@@ -24,27 +24,23 @@ from pandas_datareader import DataReader
 from pandas_datareader._utils import RemoteDataError
 import requests.exceptions as requests_exceptions
 
-symb = [
-    'AAPL',
-    'IBM',
-    'FB',
-    'ORCL',
-    'HPQ'
-]
-
+# Globals
+symb = []
 startDate = datetime(2017, 8, 1)
-endDate = datetime.today()
+endDate = datetime(2017, 9, 1)
 chart_stick_scale = 'day' # Valid values: day, week, month, year, or n="number of days" in each stick
-data_source = 'quandl'
+data_source = 'yahoo'
 
 data_list = {}
+subwindows = []
+
 wait_between_requests = 0 # Seconds
 retry_time = 1 # Seconds
 retry_count = 3
 attempt = 0
 
 # Globals
-imagesLabels = []
+imagesLabels = {}
 imagesPix = []
 imageWinCount = 0
 
@@ -52,7 +48,7 @@ imageWinCount = 0
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("SockChartingMainWindow")
-        MainWindow.setWindowTitle("Stock Charting Main")
+        MainWindow.setWindowTitle("Control Center")
         self.centralwidget = QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
         MainWindow.setCentralWidget(self.centralwidget)
@@ -86,10 +82,11 @@ class Window(QMainWindow):
         self.textEdit.setGeometry(400, 1, 400, 200)
         self.textEdit.move(400, 1)
 
-        self.dock = QDockWidget("Output", self)
+        self.dock = QDockWidget("Activity Log", self)
         self.dock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
-        self.addDockWidget(QtCore.Qt.BottomDockWidgetArea, self.dock)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.dock)
         self.dock.setWidget(self.textEdit)
+        self.textEdit.append('Started.')
         self.center()
 
     def resizeEvent(self, event):
@@ -141,6 +138,7 @@ class ChildWidget(QWidget):
         self.label1.resize(200, 40)
 
         self.txtBox = QLineEdit(self)
+        self.txtBox.setFocus(True)
         # self.layout.addWidget(self.txtBox)
         self.txtBox.move(205, 1)
         self.txtBox.resize(280, 40)
@@ -161,30 +159,55 @@ class ChildWidget(QWidget):
     def showImage(self, event, filename):
         global mdiArea, imageWinCount
 
-        print('In Show Image {0}'.format(imageWinCount) + filename)
         pixmap = QPixmap(filename)
         if pixmap:
-            imagesLabels.append(QLabel())
+            ql = QLabel()
+            imagesLabels[imageWinCount] = ql
+
             imagesLabels[imageWinCount].setPixmap(pixmap)
-            mdiArea.addSubWindow(imagesLabels[imageWinCount])
+            subwindows.append(mdiArea.addSubWindow(imagesLabels[imageWinCount]))
+
             imagesLabels[imageWinCount].show()
             imageWinCount += 1
         else:
             print('No image found')
 
+    def parseLine2List(self,line):
+        return list(map(str.strip, line.upper().split(',')))
+
+    def readStockSymb(self):
+        global symb
+        symb = self.parseLine2List(self.txtBox.text())
+
     def genCharts2(self, event):
-        global symb, attempt, retry_time, retry_count
+        global imageWinCount, subwindows, mdiArea, symb, attempt, retry_time, retry_count
+
+        # Clean up old windows and charts
+        if mdiArea:
+            for w in subwindows:
+                w.close()
+                imageWinCount -=1
+            subwindows = []
+
+        self.readStockSymb()
+        self.parent().textEdit.append('Charting {}'.format(symb))
+
+        if not symb:
+            return
+
         i = 0
         for s in symb:
             i += 1
             attempt = 1
             self.parent().statusBar().showMessage('Collecting data for ' + s)
             self.label2.setText('Collecting data for ' + s + '...')
+
             while not self.getData(self, s) and attempt < retry_count:
-                attempt = +1
+                attempt +=1
                 # time.sleep(retry_time)
                 QtTest.QTest.qWait(retry_time * 1000)
                 self.label2.setText('Retry! Collecting data for ' + s + '...')
+
             if attempt < retry_count:
                 self.parent().statusBar().showMessage('Charting ' + s)
                 self.label2.setText('Charting ' + s)
@@ -204,11 +227,16 @@ class ChildWidget(QWidget):
         try:
             data_list[s] = DataReader(s, data_source, startDate, endDate)
             return True
+
         except RemoteDataError:
-            print('Exception : Remote call failed. Will wait for {0} seconds to retry'.format(retry_time))
+            err = 'Remote call failed. Will wait for {0} seconds to retry'.format(retry_time)
+            self.parent().textEdit.append('Error {}'.format(err))
+            print('Exception : {}'.format(err))
             return False
+
         except requests_exceptions:
-            print('Request exception. Will retry ...')
+            err = 'Request exception. Will retry ...'
+            self.parent().textEdit.append('Error {}'.format(err))
             return False
 
     def plotData(self, event, s):
