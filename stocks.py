@@ -8,29 +8,27 @@ Date : 01/23/2018
 
 """
 
-import time
-import pandas as pd
+import sys
 from datetime import datetime
+
+import matplotlib.dates as dd
 import matplotlib.pyplot as plt
+import pandas as pd
+from PyQt5 import QtTest, QtCore
+from PyQt5.QtGui import QIcon, QPixmap
+from PyQt5.QtWidgets import *
 from matplotlib.dates import DateFormatter, WeekdayLocator, \
     DayLocator, MONDAY
 from matplotlib.finance import candlestick_ohlc
-import matplotlib.dates as dd
 from pandas_datareader import DataReader
 from pandas_datareader._utils import RemoteDataError
-import sys
-from PyQt5.QtWidgets import *
-from PyQt5.QtGui import QIcon
-from PyQt5 import QtTest
-from PyQt5 import QtGui
 
 symb = [
     'AAPL',
     'IBM',
-    'MSFT',
-    'HPQ',
+    'FB',
     'ORCL',
-    'FB'
+    'HPQ'
 ]
 
 startDate = datetime(2017, 7, 1)
@@ -40,50 +38,71 @@ data_list = {}
 retry_time = 10
 retry_count = 3
 attempt = 0
+imagesLabels = []
+imagesPix = []
+imageWinCount = 0
 
-class mainWindow(QMainWindow):
 
-    def __init__(self):
-        super().__init__()
+class Ui_MainWindow(object):
+    def setupUi(self, MainWindow):
+        MainWindow.setObjectName("SockChartingMainWindow")
+        MainWindow.setWindowTitle("Stock Charting Main")
+        self.centralwidget = QWidget(MainWindow)
+        self.centralwidget.setObjectName("centralwidget")
+        MainWindow.setCentralWidget(self.centralwidget)
+        QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
-        self.initUI()
 
-    def initUI(self):
-        # textEdit = QTextEdit()
-        # self.setCentralWidget(textEdit)
+class Window(QMainWindow):
+    resized = QtCore.pyqtSignal()
 
-        exitAct = QAction(QIcon('exit24.png'), 'Exit', self)
-        exitAct.setShortcut('Ctrl+Q')
-        exitAct.setStatusTip('Exit application')
-        exitAct.triggered.connect(self.close)
-
+    def __init__(self, parent=None):
+        super(Window, self).__init__(parent=parent)
+        ui = Ui_MainWindow()
+        ui.setupUi(self)
         self.statusBar()
 
-        menubar = self.menuBar()
-        fileMenu = menubar.addMenu('&File')
-        fileMenu.addAction(exitAct)
-
-        toolbar = self.addToolBar('Exit')
-        toolbar.addAction(exitAct)
+        self.mainMenu = self.menuBar()
+        self.fileMenu = self.mainMenu.addMenu('&File')
+        self.editMenu = self.mainMenu.addMenu('&Edit')
+        self.viewMenu = self.mainMenu.addMenu('&View')
+        self.searchMenu = self.mainMenu.addMenu('&Search')
+        self.toolsMenu = self.mainMenu.addMenu('&Tools')
+        self.helpMenu = self.mainMenu.addMenu('&Help')
 
         self.cw = ChildWidget()
-        self.setCentralWidget(self.cw)
 
-        self.setGeometry(300, 500, 500, 500)
-        self.setWindowTitle('Main window')
-        self.show()
+        self.setCentralWidget(self.cw)
+        self.resized.connect(self.myResizeFunc)
+
+        self.textEdit = QTextEdit()
+        self.textEdit.setEnabled(False)
+        self.textEdit.setGeometry(400, 1, 400, 200)
+        self.textEdit.move(400, 1)
+
+        self.dock = QDockWidget("Output", self)
+        self.dock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
+        self.addDockWidget(QtCore.Qt.BottomDockWidgetArea, self.dock)
+        self.dock.setWidget(self.textEdit)
+        self.center()
+
+    def resizeEvent(self, event):
+        self.resized.emit()
+        return super(Window, self).resizeEvent(event)
+
+    def myResizeFunc(self):
+        print("Resize was called")
 
     def contextMenuEvent(self, event):
 
         cmenu = QMenu(self)
-
         newAct = cmenu.addAction("New")
         opnAct = cmenu.addAction("Open")
-        quitAct = cmenu.addAction("Quit")
+        quitAct = cmenu.addAction("Exit")
         action = cmenu.exec_(self.mapToGlobal(event.pos()))
 
         if action == quitAct:
-            qApp.quit()
+            self.close()
 
     def closeEvent(self, event):
 
@@ -105,38 +124,76 @@ class mainWindow(QMainWindow):
 
 
 class ChildWidget(QWidget):
+
     def __init__(self):
         super(ChildWidget, self).__init__()
+        layout = QVBoxLayout()
 
-        chartbtn = QPushButton('Start Charting', self)
-        chartbtn.setToolTip('Start charting stocks')
-        chartbtn.clicked.connect(self.genCharts2)
-        chartbtn.resize(chartbtn.sizeHint())
-        chartbtn.move(1, 1)
+        self.label1 = QLabel('Enter Stock Symbols: ', self)
+        # self.layout.addWidget(self.label1)
+        self.label1.move(5, 1)
+        self.label1.resize(200, 40)
 
-    def genCharts2(self,event):
-        global symb, attempt,retry_time,retry_count
+        self.txtBox = QLineEdit(self)
+        # self.layout.addWidget(self.txtBox)
+        self.txtBox.move(205, 1)
+        self.txtBox.resize(280, 40)
+
+        self.chartbtn = QPushButton('Start Charting', self)
+        # self.layout.addWidget(self.chartbtn)
+        self.chartbtn.setToolTip('Start charting stocks')
+        self.chartbtn.clicked.connect(self.genCharts2)
+        self.chartbtn.resize(self.chartbtn.sizeHint())
+        self.chartbtn.move(495, 10)
+
+        self.label2 = QLabel("use ',' for multiple symbols", self)
+        self.label2.move(650, 1)
+        self.label2.resize(200, 40)
+
+        self.setLayout(layout)
+
+    def showImage(self, event, filename):
+        global mdiArea, imageWinCount
+
+        print('In Show Image {0}'.format(imageWinCount) + filename)
+        pixmap = QPixmap(filename)
+        if pixmap:
+            imagesLabels.append(QLabel())
+            imagesLabels[imageWinCount].setPixmap(pixmap)
+            mdiArea.addSubWindow(imagesLabels[imageWinCount])
+            imagesLabels[imageWinCount].show()
+            imageWinCount += 1
+        else:
+            print('No image found')
+
+    def genCharts2(self, event):
+        global symb, attempt, retry_time, retry_count
         i = 0
         for s in symb:
             i += 1
             attempt = 1
             self.parent().statusBar().showMessage('Collecting data for ' + s)
-            while not self.getData(self,s) and attempt < retry_count:
+            self.label2.setText('Collecting data for ' + s + '...')
+            while not self.getData(self, s) and attempt < retry_count:
                 attempt = +1
-                #time.sleep(retry_time)
+                # time.sleep(retry_time)
                 QtTest.QTest.qWait(retry_time * 1000)
+                self.label2.setText('Retry! Collecting data for ' + s + '...')
             if attempt < retry_count:
                 self.parent().statusBar().showMessage('Charting ' + s)
-                self.plotData2(self,s)
-                self.parent().statusBar().showMessage('Completed ' + s)
+                self.label2.setText('Charting ' + s)
+                self.plotData2(self, s)
+                # self.parent().statusBar().showMessage('Completed ' + s)
+                self.label2.setText('Completed ' + s)
                 if i < len(symb):
-                    #time.sleep(10)
+                    # time.sleep(10)
                     QtTest.QTest.qWait(10000)
                 else:
                     break
         self.parent().statusBar().showMessage('Done Charting!')
+        self.label2.setText('Done!')
 
-    def getData(self,event,s):
+    def getData(self, event, s):
         global data_list
         try:
             data_list[s] = DataReader(s, 'yahoo', startDate, endDate)
@@ -145,7 +202,7 @@ class ChildWidget(QWidget):
             print('Exception : Remote call failed. Will wait for {0} seconds to retry'.format(retry_time))
             return False
 
-    def plotData(self,event,s):
+    def plotData(self, event, s):
         plt.figure()
         ss = data_list[s]['Adj Close']
 
@@ -153,12 +210,12 @@ class ChildWidget(QWidget):
         plt.ylabel('Price')
         plt.title(s)
         ss.plot().grid(linestyle=':', b=True, which='both', )
-        plt.savefig(s+'.png')
-        #print("Plotted " + s)
+        filename = s + '.png'
+        plt.savefig(s + filename)
+        self.showImage(self, filename)
 
-
-    def plotData2(self,event,s):
-        self.pandas_candlestick_ohlc(self,data_list[s],s)
+    def plotData2(self, event, s):
+        self.pandas_candlestick_ohlc(self, data_list[s], s)
 
     def pandas_candlestick_ohlc(self, event, dat, s, stick="day", otherseries=None):
         """
@@ -180,7 +237,8 @@ class ChildWidget(QWidget):
                 stick = 1  # Used for plotting
             elif stick in ["week", "month", "year"]:
                 if stick == "week":
-                    transdat["week"] = pd.to_datetime(transdat.index).map(lambda x: x.isocalendar()[1])  # Identify weeks
+                    transdat["week"] = pd.to_datetime(transdat.index).map(
+                        lambda x: x.isocalendar()[1])  # Identify weeks
                 elif stick == "month":
                     transdat["month"] = pd.to_datetime(transdat.index).map(lambda x: x.month)  # Identify months
                 transdat["year"] = pd.to_datetime(transdat.index).map(lambda x: x.isocalendar()[0])  # Identify years
@@ -204,7 +262,8 @@ class ChildWidget(QWidget):
             transdat["stick"] = [np.floor(i / stick) for i in range(len(transdat.index))]
             grouped = transdat.groupby("stick")
             plotdat = pd.DataFrame(
-                {"Open": [], "High": [], "Low": [], "Close": []})  # Create empty data frame containing what will be plotted
+                {"Open": [], "High": [], "Low": [],
+                 "Close": []})  # Create empty data frame containing what will be plotted
             for name, group in grouped:
                 plotdat = plotdat.append(pd.DataFrame({"Open": group.iloc[0, 0],
                                                        "High": max(group.High),
@@ -248,14 +307,22 @@ class ChildWidget(QWidget):
         plt.xlabel('Date')
         plt.ylabel('Price')
         plt.title(s)
+        filename = s + '.png'
+        plt.savefig(filename)
 
-        plt.savefig(s + '.png')
-        #plt.show()
+        self.showImage(self, filename)
 
-
-
-
-if __name__ == '__main__':
+def main():
+    global mdiArea
     app = QApplication(sys.argv)
-    ex = mainWindow()
+    app.setWindowIcon(QIcon('dataicon.png'))
+
+    mdiArea = QMdiArea()
+
+    w = Window()
+    mdiArea.addSubWindow(w).resize(1000, 400)
+    mdiArea.setWindowTitle('Stock Analysis')
+    mdiArea.show()
     sys.exit(app.exec_())
+
+main()
