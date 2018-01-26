@@ -10,7 +10,7 @@ Date : 01/23/2018
 
 import sys
 from datetime import datetime
-
+import numpy as np
 import matplotlib.dates as dd
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -22,6 +22,7 @@ from matplotlib.dates import DateFormatter, WeekdayLocator, \
 from matplotlib.finance import candlestick_ohlc
 from pandas_datareader import DataReader
 from pandas_datareader._utils import RemoteDataError
+import requests.exceptions as requests_exceptions
 
 symb = [
     'AAPL',
@@ -31,13 +32,18 @@ symb = [
     'HPQ'
 ]
 
-startDate = datetime(2017, 7, 1)
-endDate = datetime(2018, 1, 22)
+startDate = datetime(2017, 8, 1)
+endDate = datetime.today()
+chart_stick_scale = 'day' # Valid values: day, week, month, year, or n="number of days" in each stick
+data_source = 'quandl'
 
 data_list = {}
-retry_time = 10
+wait_between_requests = 0 # Seconds
+retry_time = 1 # Seconds
 retry_count = 3
 attempt = 0
+
+# Globals
 imagesLabels = []
 imagesPix = []
 imageWinCount = 0
@@ -187,7 +193,7 @@ class ChildWidget(QWidget):
                 self.label2.setText('Completed ' + s)
                 if i < len(symb):
                     # time.sleep(10)
-                    QtTest.QTest.qWait(10000)
+                    QtTest.QTest.qWait(wait_between_requests * 1000)
                 else:
                     break
         self.parent().statusBar().showMessage('Done Charting!')
@@ -196,10 +202,13 @@ class ChildWidget(QWidget):
     def getData(self, event, s):
         global data_list
         try:
-            data_list[s] = DataReader(s, 'yahoo', startDate, endDate)
+            data_list[s] = DataReader(s, data_source, startDate, endDate)
             return True
         except RemoteDataError:
             print('Exception : Remote call failed. Will wait for {0} seconds to retry'.format(retry_time))
+            return False
+        except requests_exceptions:
+            print('Request exception. Will retry ...')
             return False
 
     def plotData(self, event, s):
@@ -215,7 +224,7 @@ class ChildWidget(QWidget):
         self.showImage(self, filename)
 
     def plotData2(self, event, s):
-        self.pandas_candlestick_ohlc(self, data_list[s], s)
+        self.pandas_candlestick_ohlc(self, data_list[s], s, stick=chart_stick_scale)
 
     def pandas_candlestick_ohlc(self, event, dat, s, stick="day", otherseries=None):
         """
@@ -278,7 +287,7 @@ class ChildWidget(QWidget):
         # Set plot parameters, including the axis object ax used for plotting
         fig, ax = plt.subplots()
         fig.subplots_adjust(bottom=0.2)
-        if plotdat.index[-1] - plotdat.index[0] < pd.Timedelta('730 days'):
+        if plotdat.index[-1] - plotdat.index[0] < pd.Timedelta('350 days'):
             weekFormatter = DateFormatter('%b %d')  # e.g., Jan 12
             ax.xaxis.set_major_locator(mondays)
             ax.xaxis.set_minor_locator(alldays)
@@ -292,7 +301,7 @@ class ChildWidget(QWidget):
         candlestick_ohlc(ax, list(
             zip(list(dd.date2num(plotdat.index.tolist())), plotdat["Open"].tolist(), plotdat["High"].tolist(),
                 plotdat["Low"].tolist(), plotdat["Close"].tolist())),
-                         colorup="black", colordown="red", width=stick * .4)
+                         colorup="black", colordown="red", width=stick )
 
         # Plot other series (such as moving averages) as lines
         if otherseries != None:
