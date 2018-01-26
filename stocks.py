@@ -125,6 +125,13 @@ class Window(QMainWindow):
         qr.moveCenter(cp)
         self.move(qr.topLeft())
 
+class MyQLaber(QLabel):
+    def __init__(self):
+        super(MyQLaber, self).__init__()
+
+    def closeEvent(self, event):
+        event.ignore()
+        self.setWindowState(QtCore.Qt.WindowMinimized)
 
 class ChildWidget(QWidget):
 
@@ -161,7 +168,8 @@ class ChildWidget(QWidget):
 
         pixmap = QPixmap(filename)
         if pixmap:
-            ql = QLabel()
+            ql = MyQLaber()
+            ql.setWindowTitle(filename)
             imagesLabels[imageWinCount] = ql
 
             imagesLabels[imageWinCount].setPixmap(pixmap)
