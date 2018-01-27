@@ -114,6 +114,7 @@ class Window(QMainWindow):
                                      QMessageBox.No, QMessageBox.No)
 
         if reply == QMessageBox.Yes:
+            mdiArea.close()
             event.accept()
         else:
             event.ignore()
