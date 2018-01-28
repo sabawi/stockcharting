@@ -10,32 +10,32 @@ Date : 01/23/2018
 
 import sys
 from datetime import datetime
-import numpy as np
+
 import matplotlib.dates as dd
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+import requests.exceptions as requests_exceptions
 from PyQt5 import QtTest, QtCore
 from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5.QtWidgets import *
-from matplotlib.dates import DateFormatter, WeekdayLocator, \
-    DayLocator, MONDAY
+from matplotlib.dates import DateFormatter, WeekdayLocator, DayLocator, MONDAY
 from matplotlib.finance import candlestick_ohlc
 from pandas_datareader import DataReader
 from pandas_datareader._utils import RemoteDataError
-import requests.exceptions as requests_exceptions
 
 # Globals
 symb = []
 startDate = datetime(2017, 8, 1)
 endDate = datetime(2017, 9, 1)
-chart_stick_scale = 'day' # Valid values: day, week, month, year, or n="number of days" in each stick
+chart_stick_scale = 'day'  # Valid values: day, week, month, year, or n="number of days" in each stick
 data_source = 'yahoo'
 
 data_list = {}
 subwindows = []
 
-wait_between_requests = 0 # Seconds
-retry_time = 1 # Seconds
+wait_between_requests = 0  # Seconds
+retry_time = 1  # Seconds
 retry_count = 3
 attempt = 0
 
@@ -55,22 +55,51 @@ class Ui_MainWindow(object):
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
 
-class Window(QMainWindow):
+class ControlWindow(QMainWindow):
     resized = QtCore.pyqtSignal()
 
     def __init__(self, parent=None):
-        super(Window, self).__init__(parent=parent)
+        super(ControlWindow, self).__init__(parent=parent)
         ui = Ui_MainWindow()
         ui.setupUi(self)
         self.statusBar()
 
         self.mainMenu = self.menuBar()
+
         self.fileMenu = self.mainMenu.addMenu('&File')
-        self.editMenu = self.mainMenu.addMenu('&Edit')
-        self.viewMenu = self.mainMenu.addMenu('&View')
-        self.searchMenu = self.mainMenu.addMenu('&Search')
-        self.toolsMenu = self.mainMenu.addMenu('&Tools')
-        self.helpMenu = self.mainMenu.addMenu('&Help')
+        #       Add file submenu
+        self.exitSubMenu = QAction('E&xit', self)
+        self.exitSubMenu.setShortcut('Ctrl+x')
+        self.exitSubMenu.triggered.connect(self.close)
+        self.fileMenu.addAction(self.exitSubMenu)
+
+        #        self.editMenu = self.mainMenu.addMenu('&Edit')
+
+        #        self.viewMenu = self.mainMenu.addMenu('&View')
+
+        self.windowsMenu = self.mainMenu.addMenu('&Windows')
+        # add Windows submenu
+        self.cascadeSubMenu = QAction('C&ascade', self)
+        self.cascadeSubMenu.setShortcut('Ctrl+a')
+        self.cascadeSubMenu.triggered.connect(self.cascadeWindows)
+        self.windowsMenu.addAction(self.cascadeSubMenu)
+
+        self.tileSubMenu = QAction('&Tile', self)
+        self.tileSubMenu.setShortcut('Ctrl+t')
+        self.tileSubMenu.triggered.connect(self.tileWindows)
+        self.windowsMenu.addAction(self.tileSubMenu)
+        self.windowsMenu.addSeparator()
+
+        # subWinList = QMdiArea.subWindowList(mdiArea)
+        # for sw in subWinList:
+        #     title = '{}'.format(sw.windowTitle)
+        #     print(title)
+        #     self.winid = QAction(title, self)
+        #     self.winid.triggered.connect(sw.setFocus())
+        #     self.windowsMenu.addAction(self.winid)
+
+        # self.toolsMenu = self.mainMenu.addMenu('&Tools')
+        # self.helpMenu = self.mainMenu.addMenu('&Help')
 
         self.cw = ChildWidget()
 
@@ -89,15 +118,23 @@ class Window(QMainWindow):
         self.textEdit.append('Started.')
         self.center()
 
+    def cascadeWindows(self, event):
+        mdiArea.cascadeSubWindows()
+
+    def tileWindows(self, event):
+        mdiArea.tileSubWindows()
+
+    def exitWindow(self, event):
+        self.close()
+
     def resizeEvent(self, event):
         self.resized.emit()
-        return super(Window, self).resizeEvent(event)
+        return super(ControlWindow, self).resizeEvent(event)
 
     def myResizeFunc(self):
-        print("Resize was called")
+        parent_g = self.parent().geometry()
 
     def contextMenuEvent(self, event):
-
         cmenu = QMenu(self)
         newAct = cmenu.addAction("New")
         opnAct = cmenu.addAction("Open")
@@ -108,16 +145,19 @@ class Window(QMainWindow):
             self.close()
 
     def closeEvent(self, event):
+        event.ignore()
+        mdiArea.close()
 
-        reply = QMessageBox.question(self, 'Message',
-                                     "Are you sure to quit?", QMessageBox.Yes |
-                                     QMessageBox.No, QMessageBox.No)
+    def center(self):
+        qr = self.frameGeometry()
+        cp = QDesktopWidget().availableGeometry().center()
+        qr.moveCenter(cp)
+        self.move(qr.topLeft())
 
-        if reply == QMessageBox.Yes:
-            mdiArea.close()
-            event.accept()
-        else:
-            event.ignore()
+
+class StQMdiArea(QMdiArea):
+    def __init__(self):
+        super(StQMdiArea, self).__init__()
 
     def center(self):
 
@@ -126,13 +166,50 @@ class Window(QMainWindow):
         qr.moveCenter(cp)
         self.move(qr.topLeft())
 
-class MyQLaber(QLabel):
+    def closeEvent(self, event):
+        reply = QMessageBox.question(self, 'Message',
+                                     "Are you sure to quit?", QMessageBox.Yes |
+                                     QMessageBox.No, QMessageBox.No)
+
+        if reply == QMessageBox.Yes:
+            event.accept()
+        else:
+            event.ignore()
+
+    def resizeEvent(self, event):
+        subWinList = QMdiArea.subWindowList(self)
+        # g = self.geometry()
+        # for sw in subWinList:
+        #     print(sw.windowTitle())
+        #     sw.setGeometry(g)
+        super(StQMdiArea, self).resizeEvent(event)
+
+
+class StQLaber(QLabel):
     def __init__(self):
-        super(MyQLaber, self).__init__()
+        super(StQLaber, self).__init__()
+        self.myName = ''
+
+    def addToWindowsMenu(self, Name):
+        global controlWindow
+        self.myName = Name
+        self.winid = QAction(Name, self)
+        self.winid.triggered.connect(self.inFocusWindow)
+        controlWindow.windowsMenu.addAction(self.winid)
+
+    def removeFromWindowMenu(self):
+        self.winid.setVisible(False)
+
+    def inFocusWindow(self):
+        global mdiArea
+        self.setEnabled(True)
+        self.setWindowState(QtCore.Qt.WindowActive)
+        self.setFocus()
 
     def closeEvent(self, event):
         event.ignore()
         self.setWindowState(QtCore.Qt.WindowMinimized)
+
 
 class ChildWidget(QWidget):
 
@@ -150,6 +227,7 @@ class ChildWidget(QWidget):
         # self.layout.addWidget(self.txtBox)
         self.txtBox.move(205, 1)
         self.txtBox.resize(280, 40)
+        self.txtBox.returnPressed.connect(self.genCharts2)
 
         self.chartbtn = QPushButton('Start Charting', self)
         # self.layout.addWidget(self.chartbtn)
@@ -164,13 +242,22 @@ class ChildWidget(QWidget):
 
         self.setLayout(layout)
 
+    def resizeMe(self):
+        parent_g = self.parent().geometry()
+
+    def resizeEvent(self, event):
+        #       print('Got resize event')
+        self.resizeMe()
+        return super(ChildWidget, self).resizeEvent(event)
+
     def showImage(self, event, filename):
         global mdiArea, imageWinCount
 
         pixmap = QPixmap(filename)
         if pixmap:
-            ql = MyQLaber()
+            ql = StQLaber()
             ql.setWindowTitle(filename)
+            ql.addToWindowsMenu(filename)
             imagesLabels[imageWinCount] = ql
 
             imagesLabels[imageWinCount].setPixmap(pixmap)
@@ -181,21 +268,21 @@ class ChildWidget(QWidget):
         else:
             print('No image found')
 
-    def parseLine2List(self,line):
+    def parseLine2List(self, line):
         return list(map(str.strip, line.upper().split(',')))
 
     def readStockSymb(self):
         global symb
         symb = self.parseLine2List(self.txtBox.text())
 
-    def genCharts2(self, event):
+    def genCharts2(self, event=None):
         global imageWinCount, subwindows, mdiArea, symb, attempt, retry_time, retry_count
 
         # Clean up old windows and charts
         if mdiArea:
             for w in subwindows:
                 w.close()
-                imageWinCount -=1
+                imageWinCount -= 1
             subwindows = []
 
         self.readStockSymb()
@@ -212,7 +299,7 @@ class ChildWidget(QWidget):
             self.label2.setText('Collecting data for ' + s + '...')
 
             while not self.getData(self, s) and attempt < retry_count:
-                attempt +=1
+                attempt += 1
                 # time.sleep(retry_time)
                 QtTest.QTest.qWait(retry_time * 1000)
                 self.label2.setText('Retry! Collecting data for ' + s + '...')
@@ -230,6 +317,9 @@ class ChildWidget(QWidget):
                     break
         self.parent().statusBar().showMessage('Done Charting!')
         self.label2.setText('Done!')
+
+        self.setFocus(True)
+        self.txtBox.setFocus(True)
 
     def getData(self, event, s):
         global data_list
@@ -338,7 +428,7 @@ class ChildWidget(QWidget):
         candlestick_ohlc(ax, list(
             zip(list(dd.date2num(plotdat.index.tolist())), plotdat["Open"].tolist(), plotdat["High"].tolist(),
                 plotdat["Low"].tolist(), plotdat["Close"].tolist())),
-                         colorup="black", colordown="red", width=stick )
+                         colorup="black", colordown="red", width=stick)
 
         # Plot other series (such as moving averages) as lines
         if otherseries != None:
@@ -358,17 +448,22 @@ class ChildWidget(QWidget):
 
         self.showImage(self, filename)
 
+
 def main():
-    global mdiArea
+    global mdiArea, controlWindow
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon('dataicon.png'))
 
-    mdiArea = QMdiArea()
+    mdiArea = StQMdiArea()
+    mdiArea.resize(1200, 800)
+    mdiArea.center()
 
-    w = Window()
-    mdiArea.addSubWindow(w).resize(1000, 400)
+    controlWindow = ControlWindow()
+
+    mdiArea.addSubWindow(controlWindow).resize(1200, 200)
     mdiArea.setWindowTitle('Stock Analysis')
     mdiArea.show()
     sys.exit(app.exec_())
+
 
 main()
