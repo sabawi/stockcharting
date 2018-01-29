@@ -26,8 +26,9 @@ from pandas_datareader._utils import RemoteDataError
 
 # Globals
 symb = []
-startDate = datetime(2017, 8, 1)
-endDate = datetime(2017, 9, 1)
+endDate = datetime.today()
+startDate = endDate.replace( year = endDate.year - 1) ## Go back 1 year
+
 chart_stick_scale = 'day'  # Valid values: day, week, month, year, or n="number of days" in each stick
 data_source = 'yahoo'
 
