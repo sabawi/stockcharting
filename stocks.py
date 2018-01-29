@@ -6,6 +6,8 @@ Developer : Al Sabawi
 Name : stocks.py
 Date : 01/23/2018
 
+
+
 """
 
 import sys
