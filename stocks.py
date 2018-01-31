@@ -25,6 +25,7 @@ from matplotlib.dates import DateFormatter, WeekdayLocator, DayLocator, MONDAY
 from matplotlib.finance import candlestick_ohlc
 from pandas_datareader import DataReader
 from pandas_datareader._utils import RemoteDataError
+from dialogs import Ui_Settings as Setting_dialog
 
 # Globals
 symb = []
@@ -93,6 +94,15 @@ class ControlWindow(QMainWindow):
         self.windowsMenu.addAction(self.tileSubMenu)
         self.windowsMenu.addSeparator()
 
+
+        self.systemMenu = self.mainMenu.addMenu('&System')
+        # add Windows submenu
+        self.settingsSubMenu = QAction('Settings', self)
+        self.settingsSubMenu.setShortcut('Ctrl+s')
+        self.settingsSubMenu.triggered.connect(self.settingsDialog)
+        self.systemMenu.addAction(self.settingsSubMenu)
+
+
         # subWinList = QMdiArea.subWindowList(mdiArea)
         # for sw in subWinList:
         #     title = '{}'.format(sw.windowTitle)
@@ -120,6 +130,21 @@ class ControlWindow(QMainWindow):
         self.dock.setWidget(self.textEdit)
         self.textEdit.append('Started.')
         self.center()
+
+    def settingsDialog(self):
+        settingsdialog = QDialog()
+        settingsdialog.ui = Setting_dialog()
+        settingsdialog.ui.setupUi(settingsdialog)
+
+        # connect the two functions
+        settingsdialog.ui.cancel.clicked.connect(settingsdialog.close)
+        settingsdialog.ui.update.clicked.connect(self.sittingsUpdate)
+        settingsdialog.exec_()
+        settingsdialog.show()
+
+    def sittingsUpdate(self):
+        print('Do settings update here')
+
 
     def cascadeWindows(self, event):
         mdiArea.cascadeSubWindows()
