@@ -32,8 +32,9 @@ symb = []
 endDate = datetime.today()
 startDate = endDate.replace( year = endDate.year - 1) ## Go back 1 year
 
-chart_stick_scale = 'day'  # Valid values: day, week, month, year, or n="number of days" in each stick
-data_source = 'yahoo'
+chart_stick_scale = 'week'  # Valid values: day, week, month, year, or n="number of days" in each stick
+data_source = 'yahoo' # yahoo, quandl key yYCEL8BqzxYUsgG67FTb
+
 
 data_list = {}
 subwindows = []
