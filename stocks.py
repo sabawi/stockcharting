@@ -6,8 +6,6 @@ Developer : Al Sabawi
 Name : stocks.py
 Date : 01/23/2018
 
-
-
 """
 
 import sys
@@ -18,11 +16,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import requests.exceptions as requests_exceptions
+import yfinance as yf
 from PyQt5 import QtTest, QtCore
 from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5.QtWidgets import *
 from matplotlib.dates import DateFormatter, WeekdayLocator, DayLocator, MONDAY
-from matplotlib.finance import candlestick_ohlc
+# from matplotlib.finance import candlestick_ohlc
+import mplfinance as candlestick_ohlc
 from pandas_datareader import DataReader
 from pandas_datareader._utils import RemoteDataError
 from dialogs import Ui_Settings as Setting_dialog
@@ -32,7 +32,7 @@ symb = []
 endDate = datetime.today()
 startDate = endDate.replace( year = endDate.year - 1) ## Go back 1 year
 
-chart_stick_scale = 'week'  # Valid values: day, week, month, year, or n="number of days" in each stick
+chart_stick_scale = 'day'  # Valid values: day, week, month, year, or n="number of days" in each stick
 data_source = 'yahoo' # yahoo, quandl key yYCEL8BqzxYUsgG67FTb
 
 
@@ -239,9 +239,24 @@ class StQLaber(QLabel):
         event.ignore()
         self.setWindowState(QtCore.Qt.WindowMinimized)
 
-
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle('Stock Analysis')
+        
+        # Create the MDI area and set it as the central widget
+        self.mdiArea = StQMdiArea()
+        self.setCentralWidget(self.mdiArea)
+        
+        # Create the control window and add it as a subwindow in the MDI area
+        self.controlWindow = ControlWindow()
+        subWindow = self.mdiArea.addSubWindow(self.controlWindow)
+        subWindow.resize(1200, 200)
+        self.controlWindow.show()
+        
 class ChildWidget(QWidget):
-
+    global mainWindow
+    
     def __init__(self):
         super(ChildWidget, self).__init__()
         layout = QVBoxLayout()
@@ -280,7 +295,7 @@ class ChildWidget(QWidget):
         return super(ChildWidget, self).resizeEvent(event)
 
     def showImage(self, event, filename):
-        global mdiArea, imageWinCount
+        global imageWinCount
 
         pixmap = QPixmap(filename)
         if pixmap:
@@ -305,7 +320,8 @@ class ChildWidget(QWidget):
         symb = self.parseLine2List(self.txtBox.text())
 
     def genCharts2(self, event=None):
-        global imageWinCount, subwindows, mdiArea, symb, attempt, retry_time, retry_count
+        global mdiArea
+        global imageWinCount, subwindows, symb, attempt, retry_time, retry_count
 
         # Clean up old windows and charts
         if mdiArea:
@@ -353,7 +369,8 @@ class ChildWidget(QWidget):
     def getData(self, event, s):
         global data_list
         try:
-            data_list[s] = DataReader(s, data_source, startDate, endDate)
+            # data_list[s] = DataReader(s, data_source, startDate, endDate)
+            data_list[s] = yf.download(s,period='2y',progress=False)
             return True
 
         except RemoteDataError:
@@ -362,10 +379,10 @@ class ChildWidget(QWidget):
             print('Exception : {}'.format(err))
             return False
 
-        except requests_exceptions:
-            err = 'Request exception. Will retry ...'
-            self.parent().textEdit.append('Error {}'.format(err))
-            return False
+        # except requests_exceptions:
+        #     err = 'Request exception. Will retry ...'
+        #     self.parent().textEdit.append('Error {}'.format(err))
+        #     return False
 
     def plotData(self, event, s):
         plt.figure()
@@ -395,7 +412,7 @@ class ChildWidget(QWidget):
         dayFormatter = DateFormatter('%d')  # e.g., 12
 
         # Create a new DataFrame which includes OHLC data for each period specified by stick input
-        transdat = dat.loc[:, ["Open", "High", "Low", "Close"]]
+        transdat = dat.loc[:, ["Open", "High", "Low", "Close","Volume"]]
         if (type(stick) == str):
             if stick == "day":
                 plotdat = transdat
@@ -409,13 +426,18 @@ class ChildWidget(QWidget):
                 transdat["year"] = pd.to_datetime(transdat.index).map(lambda x: x.isocalendar()[0])  # Identify years
                 grouped = transdat.groupby(list(set(["year", stick])))  # Group by year and other appropriate variable
                 plotdat = pd.DataFrame({"Open": [], "High": [], "Low": [],
-                                        "Close": []})  # Create empty data frame containing what will be plotted
+                                        "Close": [],"Volume":[]})  # Create empty data frame containing what will be plotted
                 for name, group in grouped:
-                    plotdat = plotdat.append(pd.DataFrame({"Open": group.iloc[0, 0],
-                                                           "High": max(group.High),
-                                                           "Low": min(group.Low),
-                                                           "Close": group.iloc[-1, 3]},
-                                                          index=[group.index[0]]))
+                    new_row = pd.DataFrame({"Open": [group.iloc[0, 0]],
+                                            "High": [max(group.High)],
+                                            "Low": [min(group.Low)],
+                                            "Close": [group.iloc[-1, 3]],
+                                            "Volume":[group.iloc[-1, 4]]},
+                                        index=[group.index[0]])
+                    if plotdat.empty:
+                        plotdat = new_row
+                    else:
+                        plotdat = pd.concat([plotdat, new_row])
                 if stick == "week":
                     stick = 5
                 elif stick == "month":
@@ -428,36 +450,50 @@ class ChildWidget(QWidget):
             grouped = transdat.groupby("stick")
             plotdat = pd.DataFrame(
                 {"Open": [], "High": [], "Low": [],
-                 "Close": []})  # Create empty data frame containing what will be plotted
+                 "Close": [],"Volume":[]})  # Create empty data frame containing what will be plotted
             for name, group in grouped:
                 plotdat = plotdat.append(pd.DataFrame({"Open": group.iloc[0, 0],
                                                        "High": max(group.High),
                                                        "Low": min(group.Low),
-                                                       "Close": group.iloc[-1, 3]},
+                                                       "Close": group.iloc[-1, 3],
+                                                       "Volume": group.iloc[-1, 4]},
                                                       index=[group.index[0]]))
+                
 
         else:
             raise ValueError(
                 'Valid inputs to argument "stick" include the strings "day", "week", "month", "year", or a positive integer')
 
         # Set plot parameters, including the axis object ax used for plotting
-        fig, ax = plt.subplots()
-        fig.subplots_adjust(bottom=0.2)
-        if plotdat.index[-1] - plotdat.index[0] < pd.Timedelta('350 days'):
-            weekFormatter = DateFormatter('%b %d')  # e.g., Jan 12
-            ax.xaxis.set_major_locator(mondays)
-            ax.xaxis.set_minor_locator(alldays)
-        else:
-            weekFormatter = DateFormatter('%b %d, %Y')
-        ax.xaxis.set_major_formatter(weekFormatter)
+        # fig, ax = plt.subplots(
+        #     figsize=(16, 9)
+        # )
+        # fig.subplots_adjust(bottom=0.2)
+        # if plotdat.index[-1] - plotdat.index[0] < pd.Timedelta('350 days'):
+        #     weekFormatter = DateFormatter('%b %d')  # e.g., Jan 12
+        #     ax.xaxis.set_major_locator(mondays)
+        #     ax.xaxis.set_minor_locator(alldays)
+        # else:
+        #     weekFormatter = DateFormatter('%b %d, %Y')
+        # ax.xaxis.set_major_formatter(weekFormatter)
 
-        ax.grid(True)
+        # ax.grid(True)
 
+        # candlestick_ohlc.plot(transdat["week"],type='candle')
         # Create the candelstick chart
-        candlestick_ohlc(ax, list(
-            zip(list(dd.date2num(plotdat.index.tolist())), plotdat["Open"].tolist(), plotdat["High"].tolist(),
-                plotdat["Low"].tolist(), plotdat["Close"].tolist())),
-                         colorup="black", colordown="red", width=stick)
+        # candlestick_ohlc(ax, list(
+        #     zip(list(dd.date2num(plotdat.index.tolist())), plotdat["Open"].tolist(), plotdat["High"].tolist(),
+        #         plotdat["Low"].tolist(), plotdat["Close"].tolist())),
+        #                  colorup="black", colordown="red", width=stick)
+        
+                
+        style = candlestick_ohlc.make_mpf_style(marketcolors=candlestick_ohlc.make_marketcolors(up="r", down="#0000CC",inherit=True),
+                           gridcolor="gray", gridstyle="--", gridaxis="both") 
+        
+        print(plotdat)
+        
+        fig2, ax = candlestick_ohlc.plot(type='candle',data=plotdat,mav=(20,40,50,200),
+                                     style=style,volume=True,tight_layout=True,returnfig=True,figsize =(16,9), axtitle=f"{s} Stock Chart")
 
         # Plot other series (such as moving averages) as lines
         if otherseries != None:
@@ -465,13 +501,22 @@ class ChildWidget(QWidget):
                 otherseries = [otherseries]
             dat.loc[:, otherseries].plot(ax=ax, lw=1.3, grid=True)
 
-        ax.xaxis_date()
-        ax.autoscale_view()
-        plt.setp(plt.gca().get_xticklabels(), rotation=45, horizontalalignment='right')
+        # ax.xaxis_date()
+        # ax.autoscale_view()
+        # plt.setp(plt.gca().get_xticklabels(), rotation=45, horizontalalignment='right')
+        
 
-        plt.xlabel('Date')
-        plt.ylabel('Price')
-        plt.title(s)
+
+        # plt.xlabel('Date')
+        # plt.ylabel('Price')
+        # plt.title(s)        
+        
+        # Create and Customize a legend
+        # ax.legend()
+        # ax[0].legend([None]*(len(added_plots)+2))
+        # handles = axes[0].get_legend().legendHandles
+        # axes[0].legend(handles=handles[2:],labels=list(plotdat.columns[4:]))
+        
         filename = s + '.png'
         plt.savefig(filename)
 
@@ -482,10 +527,15 @@ def main():
     global mdiArea, controlWindow
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon('dataicon.png'))
+    
+    mainWindow = MainWindow()
+    
+    # Maximize the main window
+    mainWindow.showMaximized()
+    mdiArea = mainWindow.mdiArea  # Assign the mdiArea from MainWindow to the global mdiArea
 
-    mdiArea = StQMdiArea()
-    mdiArea.resize(1200, 800)
-    mdiArea.center()
+    # Show the main window
+    mainWindow.show()
 
     controlWindow = ControlWindow()
 
